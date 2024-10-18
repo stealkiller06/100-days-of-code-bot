@@ -1,13 +1,16 @@
 const cron = require('node-cron');
 const moment = require('moment-timezone');
+const fs = require('fs').promises;
+const path = require('path');
 
 
 const TIMEZONE = 'America/Caracas'; // GMT -4
 
+
+
+// @TODO Refactor this code to improve readability and maintainability
 cron.schedule('0 23 * * *', async () => {
-
     try {
-
         const client = require("../index.js")
 
         const guild = client.guilds.cache.get(process.env.GUILD_ID); // Replace with your guild ID
@@ -38,21 +41,49 @@ cron.schedule('0 23 * * *', async () => {
         });
 
 
-        const usernameOfpeopleSentMessagesToday = messagesSentToday.map(message => message.author.username);
 
+        const usernameOfpeopleSentMessagesToday = messagesSentToday.map(message => message.author.username);
         const usersNotMessagedToday = role100DaysOfCodeData.members.filter(member => !usernameOfpeopleSentMessagesToday.includes(member.user.username));
 
-        let message = `<@&${process.env.ROLE_100_DAYS_OF_CODE}> Listado de personas que no mandaron sus actualizaciones hoy (Si apareces dos días seguidos en esta lista estarás eliminado del reto): \n\n`;
+        // Read the previous day's data
+        const dataFilePath = path.join(__dirname, 'usersNotMessaged.json');
+        let previousData = {};
+        try {
+            const fileContent = await fs.readFile(dataFilePath, 'utf8');
+            previousData = JSON.parse(fileContent);
+        } catch (error) {
+            console.log('No previous data found or error reading file:', error.message);
+        }
 
-        usersNotMessagedToday.forEach(member => {
-            message += `<@${member.user.id}>, `;
-        });
+        let message = `<@&${process.env.ROLE_100_DAYS_OF_CODE}> Listado de personas que no mandaron sus actualizaciones hoy: \n\n`;
+        let usersToRemoveRole = [];
 
-        console.log(message)
-        channel.send(message)
+        for (const [memberId, member] of usersNotMessagedToday) {
+            message += `<@${memberId}>, `;
 
+            if (previousData[memberId]) {
+                usersToRemoveRole.push(member);
+            }
+        }
+
+        // Remove roles and send notification
+        if (usersToRemoveRole.length > 0) {
+            let removalMessage = 'Los siguientes usuarios han sido removidos del reto por no enviar actualizaciones por dos días consecutivos:\n\n';
+            for (const member of usersToRemoveRole) {
+                await member.roles.remove(role100DaysOfCodeData);
+                removalMessage += `<@${member.id}>, `;
+            }
+            await channel.send(removalMessage);
+        }
+
+        // Save current data for next day's comparison
+        const currentData = Object.fromEntries(usersNotMessagedToday.map(([id, member]) => [id, true]));
+        await fs.writeFile(dataFilePath, JSON.stringify(currentData), 'utf8');
+
+        console.log(message);
+        await channel.send(message);
 
     } catch (error) {
-        console.error(error)
+        console.error(error);
     }
 });

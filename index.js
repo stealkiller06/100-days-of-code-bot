@@ -2,6 +2,13 @@ const { Client, GatewayIntentBits, Events, Collection } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
+
+const testFileAccess = require("./testwrite");
+
+// Call the testFileAccess function
+testFileAccess().catch(error => {
+    console.error('Error during file access test:', error);
+});
 dotenv.config();
 
 const TOKEN = process.env.TOKEN;
